@@ -13,6 +13,8 @@ Detailed playbooks for each scenario in SKILL.md's "Scenario presets" table. Rea
 /graphify . --wiki
 ```
 
+If the user provided a GitHub URL (`https://github.com/owner/repo`) instead of a local path, SKILL Step 0 automatically calls `graphify clone <url>` first. The repo lands at `~/.graphify/repos/<owner>/<repo>` and that path is what feeds the rest of the pipeline. Subsequent runs reuse the local clone (no re-fetch). For comparing two repos: `graphify clone url1 && graphify clone url2 && /graphify ./url1-path && /graphify ./url2-path && graphify merge-graphs g1.json g2.json`.
+
 **After the run, do this in order:**
 
 1. Surface the **top 5–6 God Nodes** verbatim from the report. Add framing in your own voice: "these are the abstractions to learn first." (The framing is your addition; the report just lists names + degree.)

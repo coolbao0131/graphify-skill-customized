@@ -50,20 +50,19 @@ Like "Module docstring..." or "import statements" appearing as god nodes. Extrac
 
 ---
 
-## Symptom: All extraction edges have confidence_score=0.5
+## Symptom: Many edges cluster at exactly 0.55 / 0.65 / 0.75 / 0.85 / 0.95
 
-Subagent didn't follow prompt rules (should be 1.0 for EXTRACTED, 0.6-0.9 for INFERRED). Two cases:
+Not a bug. v0.6.6+ uses a discrete confidence rubric for INFERRED edges (rather than continuous 0.6–0.9). Edges should snap to one of those five values. If you see lots of 0.5 specifically, that's a v0.4.0–0.6.5 artifact and means the user is on an outdated graphifyy. Tell them to `pip install --upgrade graphifyy`.
 
-1. **One specific subagent chunk was lazy**. Check which `.graphify_semantic.json` source_files have 0.5 edges. If concentrated in one chunk, re-dispatch that chunk only.
-2. **AST edges have 0.5** (rare in v0.4.0, but happens for some edge types). PKG-2. Not fixable in skill — note to user that AST edges in this corpus all flag at 0.5, but they're still EXTRACTED-class (treat as ground truth).
+If subagent edges have wildly off scores (e.g. all 0.5 or all 1.0), one specific chunk was lazy. Check `.graphify_semantic.json` source_files and re-dispatch that chunk only.
 
 ---
 
-## Symptom: `--update` ran subagents on doc files even though I'm sure cache should hit
+## Symptom: `--update` re-extracts even unchanged files
 
-PKG-3: `save_semantic_cache` returns 0 saved files even with valid input. Cache is broken in v0.4.0 for semantic extraction. AST cache works.
+For doc/paper/image: this is correct behaviour for content-changed files (v0.6.2+ uses content hash, not just mtime, to avoid spurious re-extraction from sync tools).
 
-Workaround: there isn't one in skill-land. Tell user upfront before kicking off `--update` that doc/paper/image changes will incur full re-extraction cost. Code changes via AST are still cached and free.
+If unchanged files re-extract anyway, check that the manifest `graphify-out/manifest.json` survived between runs. v0.6.2 fixed a bug where the manifest wasn't persisted, causing every run to re-extract everything. If the user is on <0.6.2, upgrade.
 
 ---
 
@@ -76,20 +75,6 @@ python -u -m graphify.watch <path> --debounce 2
 ```
 
 The watch loop _is_ running silently — the print statements are buffered until newline + flush. With `-u` they appear immediately.
-
----
-
-## Symptom: `graphify install --platform cursor` crashes
-
-PKG-7: `_cursor_install() missing 1 required positional argument: 'project_dir'`. Don't use it. Workaround:
-
-```bash
-graphify install --platform claude   # works
-# Or call the function directly with correct signature:
-python -c "from graphify.__main__ import _cursor_install; from pathlib import Path; _cursor_install(Path('.'))"
-```
-
-If user genuinely needs cursor support, do the manual call and tell them what happened.
 
 ---
 
