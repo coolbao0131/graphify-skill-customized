@@ -159,11 +159,15 @@ def build_meta_graph(
     *,
     skip_recently_updated_min: int = 5,
     max_workers: int = 4,
+    existing: MetaGraph | None = None,
 ) -> MetaGraph:
     """Fetch all notebooks, build meta-graph nodes + edges + IDF.
 
     skip_recently_updated_min: skip notebooks updated within last N min
         (still indexing on NotebookLM side; cross-query may timeout).
+    existing: if provided, reuse nodes whose updated_at hasn't changed.
+        Only re-fetch new or modified notebooks. Edges + IDF are always
+        recomputed (cheap, depend on whole corpus).
     """
     client = get_client()
     nb_list = nb_svc.list_notebooks(client)
@@ -193,6 +197,28 @@ def build_meta_graph(
         eligible.append(nb)
 
     print(f"[build] {len(eligible)} eligible after filter", file=sys.stderr)
+
+    # Incremental: split into reusable vs needs-fetch
+    reusable: list[NotebookNode] = []
+    if existing is not None:
+        old_by_id = {n.notebook_id: n for n in existing.nodes}
+        still_eligible_ids = {nb["id"] for nb in eligible}
+        to_fetch = []
+        for nb in eligible:
+            old = old_by_id.get(nb["id"])
+            # reuse if updated_at unchanged AND title unchanged
+            if (old and old.updated_at == nb.get("updated_at", "")
+                    and old.label == (nb.get("title", "") or "(untitled)")[:200]):
+                reusable.append(old)
+            else:
+                to_fetch.append(nb)
+        dropped = [n for nid, n in old_by_id.items() if nid not in still_eligible_ids]
+        if dropped:
+            print(f"  dropped {len(dropped)} notebooks no longer eligible: "
+                  f"{[d.label[:25] for d in dropped[:5]]}", file=sys.stderr)
+        print(f"[update] reusing {len(reusable)} unchanged, fetching {len(to_fetch)} new/modified",
+              file=sys.stderr)
+        eligible = to_fetch
 
     # Parallel fetch describe + get_notebook for source titles
     nodes: list[NotebookNode] = []
@@ -257,7 +283,10 @@ def build_meta_graph(
                 nb = futures[fut]
                 print(f"  err: {nb.get('title','?')}: {e}", file=sys.stderr)
 
-    # Build IDF from all centroid texts
+    # Merge incremental: reusable nodes + freshly fetched
+    nodes = reusable + nodes
+
+    # Build IDF from all centroid texts (always recompute — cheap, depends on corpus)
     corpus_ngrams = [_ngrams(n.centroid_text) for n in nodes]
     idf = _idf(corpus_ngrams)
 

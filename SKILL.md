@@ -72,6 +72,7 @@ When the user describes intent (not flags), map to one of these and execute the 
 | "Re-cluster but don't re-extract" (cheap) | `/graphify . --cluster-only` | recipes/scenarios.md §7 |
 | "Show me the call tree" / "graph too big to render as force layout" | `graphify tree` after a normal run — generates `GRAPH_TREE.html` (D3 collapsible tree, scales to large graphs) | — |
 | ".gitignore-style file lists" | Drop a `.graphifyignore` in the corpus root before running. Same syntax as `.gitignore`, last-match-wins | — |
+| User asks a question that **spans multiple NotebookLM notebooks** ("which of my notebooks talks about X?", "ask all my notebooks about Y", "compare my notebooks on Z") | `python ~/.claude/skills/graphify/experiments/notebooks/cli.py route "<Q>"` to see which notebooks match; then `... ask "<Q>" -k 3` to fan-out via cross_notebook_query | recipes/notebooks-meta.md |
 
 After the pipeline, **always** offer one concrete follow-up question to trace via `query` — pick the most cross-community-bridging suggested question. For details, Read `recipes/interpret-report.md`.
 
