@@ -1,3 +1,4 @@
 .DS_Store
 experiments/**/graphify-out/
 __pycache__/
+experiments/notebooks/.weekly-sync.sh
