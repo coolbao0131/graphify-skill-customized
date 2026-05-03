@@ -21,18 +21,20 @@ GRAPH_PATH = Path("graphify-out/notebooks-graph.json")
 
 
 def cmd_sync(args):
+    common_kwargs = dict(
+        skip_recently_updated_min=args.skip_min,
+        refresh_summaries=args.refresh_summaries,
+        refresh_chunk_size=args.refresh_chunk_size,
+    )
     if args.update and GRAPH_PATH.exists():
         existing = load(GRAPH_PATH)
-        g = build_meta_graph(
-            skip_recently_updated_min=args.skip_min,
-            existing=existing,
-        )
+        g = build_meta_graph(existing=existing, **common_kwargs)
         new = len(g.nodes) - len(existing.nodes)
         print(f"\n✓ updated meta-graph at {GRAPH_PATH}", file=sys.stderr)
         print(f"  {len(existing.nodes)} → {len(g.nodes)} notebooks "
               f"(+{max(0, new)} new), {len(g.edges)} edges", file=sys.stderr)
     else:
-        g = build_meta_graph(skip_recently_updated_min=args.skip_min)
+        g = build_meta_graph(**common_kwargs)
         print(f"\n✓ built meta-graph from scratch at {GRAPH_PATH}", file=sys.stderr)
         print(f"  {len(g.nodes)} notebooks, {len(g.edges)} edges", file=sys.stderr)
     save(g, GRAPH_PATH)
@@ -98,6 +100,11 @@ def main():
     s.add_argument("--update", action="store_true",
                    help="incremental: keep existing nodes whose updated_at hasn't changed, "
                         "only re-fetch new/modified notebooks")
+    s.add_argument("--refresh-summaries", action="store_true",
+                   help="replace each notebook's summary with a live chat.query response "
+                        "(bypasses describe's source-budget bias). Slow: ~70s per chunk.")
+    s.add_argument("--refresh-chunk-size", type=int, default=5,
+                   help="parallel batch size for live summary refresh (default 5)")
     s.set_defaults(func=cmd_sync)
 
     s = sub.add_parser("route", help="show routing decision for a question")

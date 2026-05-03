@@ -81,14 +81,37 @@ Routing variants:
 - Per-notebook timeout ~120s; recently-modified notebooks may need indexing time
 - No rate limits hit at k=5 fan-out
 
-## Known limitations (MVP)
+## Summary freshness — when to use `--refresh-summaries`
 
-1. **`suggested_topics` always empty** in our test data — NotebookLM didn't auto-generate them. Centroid relies entirely on `summary` + `source_titles`. May need richer node text if quality drops.
-2. **`source_titles` count shows 0** in inspect output — `get_notebook` may not return sources field as expected; need to verify with `nlm source list <nb>` API.
-3. **No notebook_title in cross_result** — the SDK returns notebook_id only. We could enrich on our side using routing's `labels`.
-4. **No edge visualization yet** — graph.json is written but no HTML/wiki layer. graphify proper does this via `to_html`/`to_wiki`.
-5. **No incremental update** — `sync` rebuilds from scratch. Should compare `updated_at` per notebook and skip unchanged.
-6. **No LLM-based answer synthesis** — when low-skew triggers `global_summary_after`, the user gets N separate answers; merging is left to caller.
+By default, `sync` uses NotebookLM's `describe_notebook` API for the per-notebook summary. **describe IS regenerated live** on each call (we tested), so adding sources + re-syncing gets you a new summary automatically. BUT NotebookLM's describe has an internal **source budget** — for big notebooks it samples a subset, so the summary is biased toward whichever sources NotebookLM picked.
+
+Empirical example on a 168-source notebook:
+
+| Method | Summary length | Frameworks named |
+|---|---|---|
+| `describe_notebook` (default) | 1034 chars | 2 (NexusRAG, R³AG) |
+| `chat.query "summarize all topics"` (`--refresh-summaries`) | 1746 chars | **16** (FastGraphRAG, GraphRAG, HippoRAG, HippoRAG2, HybridRAG, KET-RAG, KGP, LazyGraphRAG, LightRAG, MixRAG, R³AG, RAGRouter, RAPTOR, RouteRAG, RouterRetriever, StructRAG) |
+
+**When to use** `--refresh-summaries`:
+- Any notebook with >50 sources (describe sampling kicks in)
+- After bulk source ingestion (e.g. you imported 50 papers at once)
+- Periodic weekly refresh
+
+**Cost**: ~70s per chunk of 5 notebooks via `cross_notebook_query`. 22 notebooks ≈ 6.5 min total. Safe to run as a `/schedule` weekly cron.
+
+```bash
+$PYTHON cli.py sync --refresh-summaries                       # full refresh
+$PYTHON cli.py sync --update --refresh-summaries              # only refresh modified + force-refresh ALL summaries
+$PYTHON cli.py sync --refresh-summaries --refresh-chunk-size 3  # smaller chunks if timeouts
+```
+
+Failed notebooks (transient timeouts) are auto-retried individually via `chat.query` after the batched pass.
+
+## Known limitations
+
+1. **`suggested_topics` always empty** in our test data — NotebookLM didn't auto-generate them. Centroid relies entirely on `summary` + `source_titles`. (Mitigated by `--refresh-summaries` since the live summary names topics inline.)
+2. **No edge visualization yet** — graph.json is written but no HTML/wiki layer. graphify proper does this via `to_html`/`to_wiki`.
+3. **No LLM-based answer synthesis** — when low-skew triggers `global_summary_after`, the user gets N separate answers; merging is left to caller.
 
 ## Future work
 

@@ -155,11 +155,83 @@ def _safe_get(client, nb_id: str) -> dict:
         return {}
 
 
+# Prompt used to get a "live" summary that bypasses NotebookLM's describe source budget.
+LIVE_SUMMARY_PROMPT = (
+    "Write a 200-word summary covering ALL main topics, methods, and key "
+    "concepts present across your sources. Be comprehensive — explicitly name "
+    "any technique, framework, model, tool, place, or person mentioned. No "
+    "introduction; go straight into the topic list."
+)
+
+
+def _live_summaries(client, nb_ids: list[str], chunk_size: int = 5,
+                    timeout: float = 120.0, retry_individual: bool = True) -> dict[str, str]:
+    """Use cross_notebook_query in chunks to fetch fresh summaries in parallel.
+
+    Each notebook receives the LIVE_SUMMARY_PROMPT; result is the answer text.
+    Returns {notebook_id: summary_text}. Failed ones return empty string.
+    Estimated cost: ~70s per chunk of 5 notebooks.
+
+    retry_individual: if True, after batched run, retry failed notebooks one-by-one
+        via chat.query (no parallelism, but no chunk timeout shared with others).
+    """
+    out: dict[str, str] = {}
+    total_chunks = (len(nb_ids) + chunk_size - 1) // chunk_size
+    for i in range(0, len(nb_ids), chunk_size):
+        chunk = nb_ids[i:i + chunk_size]
+        chunk_idx = i // chunk_size + 1
+        print(f"  [refresh] chunk {chunk_idx}/{total_chunks} "
+              f"({len(chunk)} notebooks)...", file=sys.stderr)
+        t0 = time.time()
+        try:
+            res = xn_svc.cross_notebook_query(
+                client=client,
+                query_text=LIVE_SUMMARY_PROMPT,
+                notebook_names=chunk,
+                max_concurrent=len(chunk),
+                timeout=timeout,
+            )
+            for entry in res.get("results", []):
+                nid = entry.get("notebook_id", "")
+                if entry.get("error"):
+                    print(f"    err {nid[:8]}: {entry['error']}", file=sys.stderr)
+                    out[nid] = ""
+                else:
+                    out[nid] = entry.get("answer", "") or ""
+            print(f"    {len([1 for n in chunk if out.get(n)])}/{len(chunk)} "
+                  f"summaries in {time.time()-t0:.1f}s", file=sys.stderr)
+        except Exception as e:
+            print(f"    chunk failed: {e}", file=sys.stderr)
+            for nid in chunk:
+                out[nid] = ""
+
+    if retry_individual:
+        from notebooklm_tools.services import chat as chat_svc
+        failed = [nid for nid in nb_ids if not out.get(nid)]
+        if failed:
+            print(f"  [refresh] retrying {len(failed)} failed individually "
+                  f"(chat.query, sequential)...", file=sys.stderr)
+            for nid in failed:
+                try:
+                    t0 = time.time()
+                    res = chat_svc.query(client, nid, LIVE_SUMMARY_PROMPT, timeout=timeout)
+                    ans = res.get("answer") or ""
+                    if ans:
+                        out[nid] = ans
+                        print(f"    + {nid[:8]} recovered in {time.time()-t0:.1f}s",
+                              file=sys.stderr)
+                except Exception as e:
+                    print(f"    - {nid[:8]} still failed: {e}", file=sys.stderr)
+    return out
+
+
 def build_meta_graph(
     *,
     skip_recently_updated_min: int = 5,
     max_workers: int = 4,
     existing: MetaGraph | None = None,
+    refresh_summaries: bool = False,
+    refresh_chunk_size: int = 5,
 ) -> MetaGraph:
     """Fetch all notebooks, build meta-graph nodes + edges + IDF.
 
@@ -168,6 +240,13 @@ def build_meta_graph(
     existing: if provided, reuse nodes whose updated_at hasn't changed.
         Only re-fetch new or modified notebooks. Edges + IDF are always
         recomputed (cheap, depend on whole corpus).
+    refresh_summaries: after fetching describe, REPLACE summary with a live
+        chat.query response that bypasses NotebookLM's describe source budget.
+        Slow (~70s per chunk_size notebooks via cross_notebook_query) but
+        produces richer, more comprehensive summaries — recommended for
+        notebooks with >50 sources or after bulk source ingestion.
+    refresh_chunk_size: parallel batch size for live summary refresh.
+        Higher = faster but more risk of timeout. 5 is safe.
     """
     client = get_client()
     nb_list = nb_svc.list_notebooks(client)
@@ -285,6 +364,27 @@ def build_meta_graph(
 
     # Merge incremental: reusable nodes + freshly fetched
     nodes = reusable + nodes
+
+    # Optional: refresh summaries via chat.query for richer / unbiased coverage
+    if refresh_summaries and nodes:
+        print(f"[refresh] requesting live summaries for {len(nodes)} notebooks "
+              f"(chunks of {refresh_chunk_size}, ~70s/chunk)...", file=sys.stderr)
+        live = _live_summaries(client, [n.notebook_id for n in nodes],
+                               chunk_size=refresh_chunk_size)
+        replaced = 0
+        for n in nodes:
+            new_summary = live.get(n.notebook_id, "")
+            if new_summary and len(new_summary) > 100:
+                n.summary = new_summary[:5000]
+                # Rebuild centroid_text since summary changed
+                n.centroid_text = " ".join([
+                    n.label, n.summary,
+                    " ".join(n.suggested_topics),
+                    " ".join(n.source_titles),
+                ])
+                replaced += 1
+        print(f"[refresh] replaced {replaced}/{len(nodes)} summaries with live versions",
+              file=sys.stderr)
 
     # Build IDF from all centroid texts (always recompute — cheap, depends on corpus)
     corpus_ngrams = [_ngrams(n.centroid_text) for n in nodes]

@@ -24,15 +24,13 @@ User signals:
 ## Pipeline
 
 ```bash
-PYTHON=$(which nlm | xargs -I{} dirname {} | xargs -I{} dirname {})/share/uv/tools/notebooklm-mcp-cli/bin/python
-# Or just hardcoded for tony's machine:
 PYTHON=/Users/tonyhuang/.local/share/uv/tools/notebooklm-mcp-cli/bin/python
-
 cd ~/.claude/skills/graphify/experiments/notebooks
 
 # Step 1: build (or update) the meta-graph
-$PYTHON cli.py sync                     # full rebuild (~60s for 22 notebooks)
-$PYTHON cli.py sync --update            # incremental — only refetch changed notebooks (~5s if nothing changed)
+$PYTHON cli.py sync                                   # full rebuild (~60s for 22 notebooks)
+$PYTHON cli.py sync --update                          # incremental — only refetch changed (~5s if nothing changed)
+$PYTHON cli.py sync --update --refresh-summaries      # incremental + force-refresh all summaries via chat.query (~6.5min for 22)
 
 # Step 2: see routing decision (no LLM cost, instant)
 $PYTHON cli.py route "<question>" -k 3
@@ -40,6 +38,15 @@ $PYTHON cli.py route "<question>" -k 3
 # Step 3: fan-out + get answers
 $PYTHON cli.py ask "<question>" -k 3 --max-chars 2000
 ```
+
+## When to suggest `--refresh-summaries`
+
+Default `sync` uses NotebookLM's `describe` API which has a source-budget bias on big notebooks. Suggest `--refresh-summaries` to the user when:
+- They added >20 sources to any notebook recently
+- A `route` returned an unexpected mismatch (e.g. they asked about X but X-related notebook didn't make top-3)
+- They haven't run a full refresh in ≥1 month
+
+Cost: ~6.5 min for 22 notebooks. Tell the user up front: "this fetches a comprehensive summary from each notebook via NotebookLM chat, ~6 min — runs in background."
 
 ## How to interpret routing output
 
