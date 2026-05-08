@@ -7,7 +7,11 @@ For a deeper question that doesn't fit the surface graph, also load `## Communit
 **Skip auto-attach when**:
 - User says any of: "skip graphify", "no graphify", "don't use the graph", "ignore the graph", "fresh look"
 - The question is about one specific named file/function — direct Read is cheaper than going through the graph
+- The question is about **runtime behavior, performance, or debugging** ("why is X slow", "where does this error come from", "what does X output", "trace why this race happens"). The graph is structural/static — it can't answer behavior. Use Read/Grep on the actual code path instead.
+- The question is a **direct action on a known target** ("show me X", "format Y", "add a comment to Z", "rename A to B in C", "what does line 47 do"). Skip the graph; the target is already named.
 - No `graphify-out/` exists in CWD or its parent
+
+**Stale-graph awareness**: after reading `GRAPH_REPORT.md`, check the mtime of `./graphify-out/graph.json` (`stat -f %m` on macOS, `stat -c %Y` on Linux, or in Python `Path('graphify-out/graph.json').stat().st_mtime`). If older than 7 days, append a one-line caveat to your answer: `_(graph last updated N days ago — recent changes may not be reflected; run `/graphify . --update` to refresh)_`. Critical for actively-developed code; research corpora that update monthly are fine.
 
 **Mid-session opt-in**: if user later says "use graphify" / "consult the graph" / "check the meta-graph", read the report at that point.
 
