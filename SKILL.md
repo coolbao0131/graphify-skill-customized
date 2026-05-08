@@ -1503,6 +1503,7 @@ These are real bugs verified on graphifyy v0.6.7 (2026-05-02). The skill works a
 - **`graphify.__version__` not exported**.
 - **MCP `god_nodes(top_k=N)` ignores top_k**: returns full list regardless of argument.
 - **AST extractor creates a node per function docstring**: each `def`/`class`/module docstring becomes a standalone `file_type:"rationale"` node, but the package doesn't add edges linking these back to their host symbol. Result: 10+ isolated noise nodes in the final graph (visible as "Knowledge Gaps" / weakly-connected in GRAPH_REPORT). Skill prompt rules cannot suppress this — it happens in the AST extractor before the subagent runs. **Step 4 build prunes isolated rationale nodes before clustering.**
+- **`graphify clone --help` swallows `--help` as URL**: tries to interpret `--help` as a GitHub URL and prints "not a recognised GitHub URL: --help". Use `graphify clone https://github.com/owner/repo` directly with no flags-only invocation, or check Step 0 of this SKILL for examples.
 
 **Fixed in 0.6.x — no longer needs workaround:**
 - `save_semantic_cache` no longer returns 0 (#655 in 0.6.7)

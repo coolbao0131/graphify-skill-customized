@@ -22,6 +22,9 @@ fi
 # Backup before modifying
 cp "$TARGET" "$TARGET.bak.$(date +%Y%m%d-%H%M%S)"
 
+# Rotate: keep only the most recent 5 backups
+ls -t "${TARGET}".bak.* 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+
 # Use awk to drop everything between BEGIN and END markers (inclusive).
 # Also strip the blank line right before BEGIN to avoid leaving stray gaps.
 awk '

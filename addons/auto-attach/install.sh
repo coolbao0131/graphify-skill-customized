@@ -58,6 +58,11 @@ fi
 
 # Backup target before modifying
 cp "$TARGET" "$TARGET.bak.$(date +%Y%m%d-%H%M%S)"
+
+# Rotate: keep only the most recent 5 backups (avoid disk pollution).
+# `ls -t` newest-first, `tail -n +6` skips the first 5.
+ls -t "${TARGET}".bak.* 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+
 printf '%s' "$BLOCK" >> "$TARGET"
 
 LINES_ADDED=$(printf '%s' "$BLOCK" | wc -l | tr -d ' ')

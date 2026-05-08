@@ -10,6 +10,7 @@ For a deeper question that doesn't fit the surface graph, also load `## Communit
 - The question is about **runtime behavior, performance, or debugging** ("why is X slow", "where does this error come from", "what does X output", "trace why this race happens"). The graph is structural/static — it can't answer behavior. Use Read/Grep on the actual code path instead.
 - The question is a **direct action on a known target** ("show me X", "format Y", "add a comment to Z", "rename A to B in C", "what does line 47 do"). Skip the graph; the target is already named.
 - No `graphify-out/` exists in CWD or its parent
+- **`graphify-out/` exists but `GRAPH_REPORT.md` doesn't, OR `graph.json` doesn't, OR either fails to parse as expected.** This usually means a build was interrupted mid-pipeline. Tell the user: `_(graphify-out/ found but graph appears incomplete — run /graphify . to rebuild, or skip the graph for now)_` and answer without the graph this turn. Do not crash silently.
 
 **Stale-graph awareness (drift-based, not time-based)**: after reading `GRAPH_REPORT.md`, measure how far the graph has drifted from the actual corpus.
 
