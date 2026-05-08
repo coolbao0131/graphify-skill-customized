@@ -4,6 +4,39 @@ When something fails or looks wrong. Match the symptom, run the diagnostic, appl
 
 ---
 
+## Symptom: Wrapper / agent shells out to `graphify path X Y`, sees exit=1, treats as hard error
+
+`graphify path` is inconsistent about how it signals "no match":
+
+| Case | Exit | Stream |
+|---|---|---|
+| `path FAKE Y` (one or both nodes don't exist) | **1** | **stderr** `"No node matching FAKE found."` |
+| `path A B` (real nodes, no connection between them) | 0 | stdout `"No path found between A and B."` |
+| `graphify explain FAKE` (same "no match" condition) | 0 | stdout `"No node matching FAKE found."` |
+
+That first row is the bug — same logical condition as `explain`, different signaling. Wrappers that gate on exit code mistake the "no match" case for a crash.
+
+**Fix in any CLI wrapper** (e.g. an `_path_sync` helper): catch `exit==1`, check stderr against `r"^No node matching .* found\.$"`, treat as soft response (return string, don't raise). Add a regression test like:
+
+```python
+def test_path_missing_node_is_soft():
+    proc = subprocess.run(
+        ["graphify", "path", "definitely_not_a_real_node_xyz", "another_fake"],
+        capture_output=True, text=True
+    )
+    # Despite exit=1, this is a "no match" not a crash
+    assert proc.returncode == 1
+    assert "No node matching" in proc.stderr
+    # wrapper layer should NOT raise GraphQueryError here
+    result = wrapper.path("definitely_not_a_real_node_xyz", "another_fake")
+    assert isinstance(result, str)
+    assert "No node matching" in result
+```
+
+Our own SKILL Python blocks for `/graphify path` and `/graphify explain` use NetworkX directly (not the CLI), so they exit cleanly with stdout. This issue only bites integrations that shell out to the `graphify` binary.
+
+---
+
 ## Symptom: "ERROR: Graph is empty - extraction produced no nodes"
 
 Step 4 printed this and stopped. Possible causes:
