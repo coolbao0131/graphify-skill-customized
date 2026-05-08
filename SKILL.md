@@ -346,6 +346,7 @@ Rules:
 
 Code files: focus on semantic edges AST cannot find (call relationships, shared data, arch patterns).
   Do not re-extract imports - AST already has those.
+  **Do not create separate nodes for function/class/module docstrings.** A docstring is metadata of its host symbol — if it deserves capture, store it as a `description` attribute on the function/class/module node, never as a standalone node. Symptoms of breaking this rule: a node whose label IS a sentence (`Lowercased character n-grams. Chinese single chars also count.`, `Sparse cosine on dicts.`, `IDF = log(N / df). Smoothed.`) instead of a symbol name. These show up as isolated nodes in the final graph and are pure noise. The same applies to inline comments — never node-ify them.
 Doc/paper files: extract named concepts, entities, citations. For rationale (WHY decisions were made, trade-offs, design intent): store as a `rationale` attribute on the relevant concept node — do NOT create a separate rationale node or fragment node. Only create a node for something that is itself a named entity or concept. Use `file_type:"rationale"` for concept-like nodes (ideas, principles, mechanisms, design patterns). Do NOT invent file_types like `concept` — valid values are only `code|document|paper|image|rationale`.
 Code files: when adding `calls` edges, source MUST be the caller (the function/class doing the calling), target MUST be the callee. Never reverse this direction.
 Image files: use vision to understand what the image IS - do not just OCR.
