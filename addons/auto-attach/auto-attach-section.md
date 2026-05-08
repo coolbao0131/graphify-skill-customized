@@ -13,4 +13,17 @@ For a deeper question that doesn't fit the surface graph, also load `## Communit
 
 **Mid-session opt-out**: if user says "stop using graphify" / "skip the graph for this", don't reference it for the rest of the turn.
 
+**Build offer (when no graph exists yet)**: when the user asks an architectural / cross-cutting question — "what does this project do", "how do these modules relate", "find all places X is used", "what changes if I refactor Y", "which files own concept Z" — AND the directory has more than ~20 files AND no `graphify-out/` exists in CWD or its parent, offer ONCE per session:
+
+> "This question is cross-cutting and the directory is big enough that a graph would help. Want me to run `/graphify .` first (~30k input + ~10k output tokens, a few minutes to build; future architectural questions get ~10x token reduction and persist across sessions)? Or I'll grep through this time."
+
+Then wait for the answer. If yes → run `/graphify .` and use the resulting graph. If no → fall back to direct Read/Grep, do not repeat the offer this session.
+
+**Skip the build offer when**:
+- Question is about one specific named file/function/line (no graph payoff)
+- Directory has <20 files (build cost won't pay back even on first hit)
+- Path looks throwaway: `/tmp/`, `*scratch*`, `~/Downloads/`, freshly-created repo with one file
+- User already declined or accepted this session
+- User is mid-task editing one file (the offer would interrupt flow)
+
 If `graphify-out/notebooks-graph.json` exists (NotebookLM meta-graph), the same rules apply — load `experiments/notebooks/graphify-out/GRAPH_REPORT.md` if present, otherwise inspect the json directly.
