@@ -527,6 +527,17 @@ extraction = json.loads(Path('graphify-out/.graphify_extract.json').read_text())
 detection  = json.loads(Path('graphify-out/.graphify_detect.json').read_text())
 
 G = build_from_json(extraction)
+
+# Prune isolated AST-generated rationale nodes (graphifyy v0.6.x makes one
+# node per function docstring; most end up isolated in the final graph
+# because the package doesn't link them back to their host symbol).
+# These show up as 'isolated noise' in Knowledge Gaps. Drop them.
+_dropped = [n for n, d in G.nodes(data=True)
+            if d.get('file_type') == 'rationale' and G.degree(n) <= 1]
+G.remove_nodes_from(_dropped)
+if _dropped:
+    print(f'Pruned {len(_dropped)} isolated rationale nodes (graphifyy AST docstring artifacts).')
+
 communities = cluster(G)
 cohesion = score_all(G, communities)
 tokens = {'input': extraction.get('input_tokens', 0), 'output': extraction.get('output_tokens', 0)}
@@ -538,7 +549,7 @@ questions = suggest_questions(G, communities, labels)
 
 report = generate(G, communities, cohesion, labels, gods, surprises, detection, tokens, 'INPUT_PATH', suggested_questions=questions)
 Path('graphify-out/GRAPH_REPORT.md').write_text(report)
-to_json(G, communities, 'graphify-out/graph.json')
+to_json(G, communities, 'graphify-out/graph.json', force=True)
 
 analysis = {
     'communities': {str(k): v for k, v in communities.items()},
@@ -1491,6 +1502,7 @@ These are real bugs verified on graphifyy v0.6.7 (2026-05-02). The skill works a
 - **`_fetch_webpage` ignores `--author`**: the param only acts as fallback for `contributor`. Webpages and arxiv frontmatter never get a separate `author:` field.
 - **`graphify.__version__` not exported**.
 - **MCP `god_nodes(top_k=N)` ignores top_k**: returns full list regardless of argument.
+- **AST extractor creates a node per function docstring**: each `def`/`class`/module docstring becomes a standalone `file_type:"rationale"` node, but the package doesn't add edges linking these back to their host symbol. Result: 10+ isolated noise nodes in the final graph (visible as "Knowledge Gaps" / weakly-connected in GRAPH_REPORT). Skill prompt rules cannot suppress this — it happens in the AST extractor before the subagent runs. **Step 4 build prunes isolated rationale nodes before clustering.**
 
 **Fixed in 0.6.x — no longer needs workaround:**
 - `save_semantic_cache` no longer returns 0 (#655 in 0.6.7)
