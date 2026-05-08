@@ -11,7 +11,18 @@ For a deeper question that doesn't fit the surface graph, also load `## Communit
 - The question is a **direct action on a known target** ("show me X", "format Y", "add a comment to Z", "rename A to B in C", "what does line 47 do"). Skip the graph; the target is already named.
 - No `graphify-out/` exists in CWD or its parent
 
-**Stale-graph awareness**: after reading `GRAPH_REPORT.md`, check the mtime of `./graphify-out/graph.json` (`stat -f %m` on macOS, `stat -c %Y` on Linux, or in Python `Path('graphify-out/graph.json').stat().st_mtime`). If older than 7 days, append a one-line caveat to your answer: `_(graph last updated N days ago — recent changes may not be reflected; run `/graphify . --update` to refresh)_`. Critical for actively-developed code; research corpora that update monthly are fine.
+**Stale-graph awareness (drift-based, not time-based)**: after reading `GRAPH_REPORT.md`, measure how far the graph has drifted from the actual corpus.
+
+For a normal codebase / docs corpus: walk CWD (skip `graphify-out`, `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, `.next`, `target`) and find the newest file's mtime. Compare to `./graphify-out/graph.json` mtime:
+
+- newest file ≤ graph.json: **no warning** (graph is current)
+- newest file is 0–12h newer than graph.json: **silent** (likely just an edit in progress)
+- newest file is 0.5d–7d newer, OR ≤5 files newer: append a **soft caveat** like `_(graph N days behind corpus, e.g. \`auth/session.py\` changed since build — relevant edges may be missing)_`
+- newest file is >7d newer, OR >5 files newer: append a **strong caveat** advising `/graphify . --update` BEFORE relying on the graph for this answer
+
+For the NotebookLM meta-graph at `experiments/notebooks/graphify-out/notebooks-graph.json`: drift = max(`updated_at` from `nlm notebook list`) vs the meta-graph's `built_at`. Same severity ladder, but mention `/graphify sync-notebooks --update` instead.
+
+Why drift-based not time-based: a static research corpus untouched for 30d is fine, while an active codebase with 50 commits in the last 12h is dangerously stale at any wall-clock age. Drift measures relevance directly. Cost: one `os.walk` (<0.1s) per session that uses the graph.
 
 **Mid-session opt-in**: if user later says "use graphify" / "consult the graph" / "check the meta-graph", read the report at that point.
 
